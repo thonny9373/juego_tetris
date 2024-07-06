@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tetris</title>
+    <style>
+        /* Estilos CSS */
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        #game-container {
+            text-align: center;
+        }
+
+        canvas {
+            border: 5px solid #333;
+            background-color: #f0f0f0;
+        }
+
+        #score {
+            font-family: 'Press Start 2P', cursive;
+            font-size: 24px;
+            color: #fff;
+            background-color: #000;
+            padding: 10px;
+            margin: 10px;
+            border-radius: 5px;
+        }
+
+        #next-piece {
+            border: 3px solid #333;
+            background-color: #f0f0f0;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="score">Score: 0</div>
+        <canvas id="game-board" width="300" height="600"></canvas>
+        <canvas id="next-piece" width="150" height="150"></canvas>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const canvas = document.getElementById('game-board');
+            const ctx = canvas.getContext('2d');
+
+            const nextCanvas = document.getElementById('next-piece');
+            const nextCtx = nextCanvas.getContext('2d');
+
+            const ROWS = 20;
+            const COLS = 10;
+            const BLOCK_SIZE = 30;
+            const EMPTY = "#fff";
+
+            const shapes = [
+                // Forma de L
+                [[1, 0],
+                 [1, 0],
+                 [1, 1]],
+
+                // Forma de T
+                [[0, 2, 0],
+                 [2, 2, 2]],
+
+                // Forma de O
+                [[3, 3],
+                 [3, 3]],
+
+                // Forma de J
+                [[0, 4],
+                 [0, 4],
+                 [4, 4]],
+
+                // Forma de I
+                [[5],
+                 [5],
+                 [5],
+                 [5]],
+
+                // Forma de Z
+                [[6, 6, 0],
+                 [0, 6, 6]]
+            ];
+
+            const colors = ['red', 'green', 'blue', 'orange', 'purple', 'yellow'];
+
+            let currentShape;
+            let currentColor;
+            let currentX = 0;
+            let currentY = 0;
+            let gameInterval;
+            let board;
+            let score = 0; // Variable para almacenar la puntuación
+            let speed = 1000; // Velocidad inicial del juego
+
+            const scoreElement = document.getElementById('score'); // Elemento HTML para mostrar la puntuación
+
+            // Función para actualizar la puntuación en la pantalla
+            function updateScore() {
+                scoreElement.textContent = "Score: " + score;
+            }
+
+            // Función para dibujar un cuadrado en el lienzo
+            function drawSquare(x, y, color) {
+                ctx.fillStyle = color;
+                ctx.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+                ctx.strokeStyle = "#222";
+                ctx.strokeRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+            }
+
+            // Función para dibujar el tablero de juego
+            function drawBoard() {
+                for (let row = 0; row < ROWS; row++) {
+                    for (let col = 0; col < COLS; col++) {
+                        drawSquare(col, row, board[row][col]);
+                    }
+                }
+            }
+
+            // Función para dibujar el bloque actual en el tablero
+            function drawCurrentShape() {
+                for (let row = 0; row < currentShape.length; row++) {
+                    for (let col = 0; col < currentShape[row].length; col++) {
+                        if (currentShape[row][col]) {
+                            drawSquare(currentX + col, currentY + row, currentColor);
+                        }
+                    }
+                }
+            }
+
+            // Función para borrar el bloque actual del tablero
+            function eraseCurrentShape() {
+                for (let row = 0; row < currentShape.length; row++) {
+                    for (let col = 0; col < currentShape[row].length; col++) {
+                        if (currentShape[row][col]) {
+                            drawSquare(currentX + col, currentY + row, EMPTY);
+                        }
+                    }
+                }
+            }
+
+            // Función para mover el bloque actual hacia abajo
+            function moveDown() {
+                if (!checkCollision(0, 1)) {
+                    eraseCurrentShape();
+                    currentY++;
+                    drawCurrentShape();
+                } else {
+                    fixShape();
+                }
+            }
+
+            // Función para mover el bloque actual hacia la izquierda
+            function moveLeft() {
+                if (!checkCollision(-1, 0)) {
+                    eraseCurrentShape();
+                    currentX--;
+                    drawCurrentShape();
+                }
+            }
+
+            // Función para mover el bloque actual hacia la derecha
+            function moveRight() {
+                if (!checkCollision(1, 0)) {
+                    eraseCurrentShape();
+                    currentX++;
+                    drawCurrentShape();
+                }
+            }
+
+            // Función para rotar el bloque actual en sentido horario
+            function rotateClockwise() {
+                const rotatedShape = [];
+                const rows = currentShape.length;
+                const cols = currentShape[0].length;
+                for (let col = 0; col < cols; col++) {
+                    const newRow = [];
+                    for (let row = rows - 1; row >= 0; row--) {
+                        newRow.push(currentShape[row][col]);
+                    }
+                    rotatedShape.push(newRow);
+                }
+                if (!checkCollision(0, 0, rotatedShape)) {
+                    eraseCurrentShape();
+                    currentShape = rotatedShape;
+                    drawCurrentShape();
+                }
+            }
+
+            // Función para verificar colisiones
+            function checkCollision(deltaX, deltaY, shape) {
+                const targetX = currentX + deltaX;
+                const targetY = currentY + deltaY;
+                const targetShape = shape || currentShape;
+                for (let row = 0; row < targetShape.length; row++) {
+                    for (let col = 0; col < targetShape[row].length; col++) {
+                        if (targetShape[row][col]) {
+                            const nextX = targetX + col;
+                            const nextY = targetY + row;
+                            if (nextX < 0 || nextX >= COLS || nextY >= ROWS || (nextY >= 0 && board[nextY][nextX] !== EMPTY)) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                return false;
+            }
+
+            // Función para detener y fijar el bloque actual
+            function fixShape() {
+                for (let row = 0; row < currentShape.length; row++) {
+                    for (let col = 0; col < currentShape[row].length; col++) {
+                        if (currentShape[row][col]) {
+                            const x = currentX + col;
+                            const y = currentY + row;
+                            board[y][x] = currentColor;
+                        }
+                    }
+                }
+                checkLines();
+                drawBoard(); // Dibujar el tablero después de eliminar las líneas
+                spawnShape();
+
+                // Incrementar la puntuación cuando se fija una forma
+                score += 10;
+                updateScore(); // Actualizar la puntuación en la pantalla
+
+                // Aumentar la velocidad del juego cada vez que se acumula cierta cantidad de puntos
+                if (score % 100 === 0) {
+                    clearInterval(gameInterval);
+                    speed -= 100; // Reducir el intervalo del temporizador
+                    gameInterval = setInterval(moveDown, speed); // Configurar el nuevo temporizador con la velocidad actualizada
+                }
+            }
+
+            // Función para verificar y eliminar las líneas completas
+            function checkLines() {
+                for (let row = ROWS - 1; row >= 0; row--) {
+                    if (board[row].every(cell => cell !== EMPTY)) {
+                        board.splice(row, 1);
+                        board.unshift(Array(COLS).fill(EMPTY));
+                        row++; // Incrementar 'row' para volver a verificar la misma fila
+                    }
+                }
+            }
+
+            // Función para iniciar el juego
+            function startGame() {
+                board = Array.from({ length: ROWS }, () => Array(COLS).fill(EMPTY)); // Inicializar el tablero vacío
+                drawBoard(); // Dibujar el tablero vacío
+                gameInterval = setInterval(moveDown, speed); // Hacer que el bloque caiga cada segundo
+                spawnShape(); // Generar un bloque aleatorio
+                document.addEventListener('keydown', handleKeyPress); // Escuchar eventos de teclado
+            }
+
+            // Variable para almacenar la siguiente pieza
+            let nextShape;
+            let nextColor;
+
+            // Función para generar tanto la pieza actual como la siguiente
+            function spawnShape() {
+                const randomIndex = Math.floor(Math.random() * shapes.length);
+                currentShape = shapes[randomIndex];
+                currentColor = colors[randomIndex];
+                currentX = Math.floor(COLS / 2) - Math.floor(currentShape[0].length / 2); // Centrar el bloque horizontalmente
+                currentY = 0;
+
+                // Establecer la siguiente pieza
+                const nextIndex = Math.floor(Math.random() * shapes.length);
+                nextShape = shapes[nextIndex];
+                nextColor = colors[nextIndex];
+                drawNextPiece(); // Dibujar la previsualización de la siguiente pieza
+            }
+
+            // Función para dibujar la previsualización de la siguiente pieza
+            function drawNextPiece() {
+                nextCtx.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
+                const blockSize = nextCanvas.width / 4;
+                for (let row = 0; row < nextShape.length; row++) {
+                    for (let col = 0; col < nextShape[row].length; col++) {
+                        if (nextShape[row][col]) {
+                            nextCtx.fillStyle = nextColor;
+                            nextCtx.fillRect(col * blockSize, row * blockSize, blockSize, blockSize);
+                            nextCtx.strokeStyle = "#222";
+                            nextCtx.strokeRect(col * blockSize, row * blockSize, blockSize, blockSize);
+                        }
+                    }
+                }
+            }
+
+            // Función para manejar eventos de teclado
+            function handleKeyPress(event) {
+                switch (event.key) {
+                    case 'ArrowLeft':
+                        moveLeft();
+                        break;
+                    case 'ArrowRight':
+                        moveRight();
+                        break;
+                    case 'ArrowDown':
+                        moveDown();
+                        break;
+                    case 'ArrowUp':
+                        rotateClockwise();
+                        break;
+                    default:
+                        break;
+                }
+            }
+
+            startGame(); // Iniciar el juego cuando la página se carga
+        });
+    </script>
+</body>
+</html>
